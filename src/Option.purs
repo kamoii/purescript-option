@@ -20,7 +20,9 @@ module Option
   , insert
   , modify
   , set
+  , disjointUnion
   , fromRecord
+  , fromRecord_
   , toRecord
   , class EqOption
   , eqOption
@@ -99,19 +101,6 @@ instance showOptionOption ::
 
     proxy :: Proxy list
     proxy = Proxy
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 -- | A typeclass that iterates a `RowList` converting an `Option _` to a `Boolean`.
 class EqOption (list :: Prim.RowList.RowList) (option :: #Type) | list -> option where
@@ -283,17 +272,6 @@ else instance fromRecordOptionCons ::
     value :: value
     value = Record.get label record
 
-
-
-
-
-
-
-
-
-
-
-
 -- | A typeclass that iterates a `RowList` converting an `Option _` to a `Boolean`.
 class
   (EqOption list option) <= OrdOption (list :: Prim.RowList.RowList) (option :: #Type) | list -> option where
@@ -357,11 +335,6 @@ else instance ordOptionCons ::
 
     rightValue :: Data.Maybe.Maybe value
     rightValue = get label right'
-
-
-
-
-
 
 -- | A typeclass that iterates a `RowList` converting an `Option _` to a `List String`.
 -- | The `List String` should be processed into a single `String`.
@@ -611,6 +584,15 @@ fromRecord ::
   Option option
 fromRecord = fromRecord'
 
+-- | Like `fromRecord` but where Record and Option have same fields.
+-- | This is mostly for type inference.
+fromRecord_
+  :: forall option
+   . FromRecord option option
+  => Record option
+  -> Option option
+fromRecord_ = fromRecord'
+
 -- | Attempts to fetch the value at the given key from an option.
 -- |
 -- | If the key exists in the option, `Just _` is returned.
@@ -735,6 +717,17 @@ set proxy value = modify proxy go
   where
   go :: forall a. a -> value
   go _ = value
+
+-- | Merges two options where no labels overlap.
+disjointUnion
+  :: forall option option' option''
+   . Prim.Row.Union option option' option''
+  => Prim.Row.Nub option'' option''
+  => Option option
+  -> Option option'
+  -> Option option''
+disjointUnion (Option option) (Option option') =
+  Option $ Foreign.Object.union option option
 
 -- | The expected `Record record` will have the same fields as the given `Option _` where each type is wrapped in a `Maybe`.
 -- |
