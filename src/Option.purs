@@ -14,70 +14,39 @@
 -- | Their use cases range from making APIs more flexible to interfacing with serialization formats to providing better ergonomics around data types.
 module Option
   ( Option
-  , fromRecord
   , delete
   , empty
   , get
-  , getWithDefault
   , insert
-  , jsonCodec
   , modify
   , set
+  , fromRecord
   , toRecord
-  , class DecodeJsonOption
-  , decodeJsonOption
-  , class EncodeJsonOption
-  , encodeJsonOption
   , class EqOption
   , eqOption
+  , class OrdOption
+  , compareOption
+  , class ShowOption
+  , showOption
   , class FromRecord
   , fromRecord'
   , class FromRecordOption
   , fromRecordOption
-  , class JsonCodec
-  , jsonCodec'
-  , class JsonCodecOption
-  , jsonCodecOption
-  , class OrdOption
-  , compareOption
-  , class ReadForeignOption
-  , readImplOption
-  , class ShowOption
-  , showOption
   , class ToRecord
   , toRecord'
   , class ToRecordOption
   , toRecordOption
-  , class WriteForeignOption
-  , writeForeignOption
   ) where
 
 import Prelude
 
-import Control.Monad.Except as Control.Monad.Except
-import Control.Monad.Reader.Trans as Control.Monad.Reader.Trans
-import Control.Monad.Writer as Control.Monad.Writer
-import Control.Monad.Writer.Class as Control.Monad.Writer.Class
-import Data.Argonaut.Core as Data.Argonaut.Core
-import Data.Argonaut.Decode.Class as Data.Argonaut.Decode.Class
-import Data.Argonaut.Encode.Class as Data.Argonaut.Encode.Class
-import Data.Argonaut.Encode.Combinators as Data.Argonaut.Encode.Combinators
-import Data.Codec as Data.Codec
-import Data.Codec.Argonaut as Data.Codec.Argonaut
-import Data.Either as Data.Either
 import Data.List as Data.List
 import Data.Maybe as Data.Maybe
-import Data.Profunctor.Star as Data.Profunctor.Star
 import Data.Symbol as Data.Symbol
-import Data.Tuple as Data.Tuple
-import Foreign as Foreign
-import Foreign.Index as Foreign.Index
 import Foreign.Object as Foreign.Object
 import Prim.Row as Prim.Row
 import Prim.RowList as Prim.RowList
 import Record as Record
-import Simple.JSON as Simple.JSON
-import Type.Equality as Type.Equality
 import Unsafe.Coerce as Unsafe.Coerce
 
 -- | A collection of key/value pairs where any key and value may or may not exist.
@@ -89,40 +58,6 @@ newtype Option (row :: #Type)
 -- `Type.Data.RowList.RLProxy` can still be used by callers, but it's not a requirement.
 data Proxy (list :: Prim.RowList.RowList)
   = Proxy
-
--- | This instance ignores keys that do not exist in the given JSON object.
--- |
--- | If a key does not exist in the JSON object, it will not be added to the `Option _`.
--- |
--- | If a key does exists in the JSON object but the value cannot be successfully decoded, it will fail with an error.
--- |
--- | If a key does exists in the JSON object and the value can be successfully decoded, it will be added to the `Option _`.
-instance decodeJsonOptionOption ::
-  ( DecodeJsonOption list option
-  , Prim.RowList.RowToList option list
-  ) =>
-  Data.Argonaut.Decode.Class.DecodeJson (Option option) where
-  decodeJson ::
-    Data.Argonaut.Core.Json ->
-    Data.Either.Either String (Option option)
-  decodeJson json = case Data.Argonaut.Core.toObject json of
-    Data.Maybe.Just object -> decodeJsonOption (Proxy :: Proxy list) object
-    Data.Maybe.Nothing -> Data.Either.Left "Expected JSON object"
-
--- | This instance ignores keys that do not exist.
--- |
--- | If a key does not exist in the given `Option _`, it is not added to the JSON object.
--- |
--- | If a key does exists in the given `Option _`, it encodes it like normal and adds it to the JSON object.
-instance encodeJsonOptionOption ::
-  ( EncodeJsonOption list option
-  , Prim.RowList.RowToList option list
-  ) =>
-  Data.Argonaut.Encode.Class.EncodeJson (Option option) where
-  encodeJson ::
-    Option option ->
-    Data.Argonaut.Core.Json
-  encodeJson = encodeJsonOption (Proxy :: Proxy list)
 
 instance eqOptionOption ::
   ( EqOption list option
@@ -137,23 +72,6 @@ instance ordOptionOption ::
   ) =>
   Ord (Option option) where
   compare = compareOption (Proxy :: Proxy list)
-
--- | This instance ignores keys that do not exist in the given `Foreign`.
--- |
--- | If a key does not exist in the `Foreign`, it will not be added to the `Option _`.
--- |
--- | If a key does exists in the `Foreign` but the value cannot be successfully read, it will fail with an error.
--- |
--- | If a key does exists in the `Foreign` and the value can be successfully read, it will be added to the `Option _`.
-instance readForeignOptionOption ::
-  ( Prim.RowList.RowToList option list
-  , ReadForeignOption list option
-  ) =>
-  Simple.JSON.ReadForeign (Option option) where
-  readImpl ::
-    Foreign.Foreign ->
-    Foreign.F (Option option)
-  readImpl = readImplOption (Proxy :: Proxy list)
 
 instance showOptionOption ::
   ( Prim.RowList.RowToList option list
@@ -182,132 +100,18 @@ instance showOptionOption ::
     proxy :: Proxy list
     proxy = Proxy
 
--- | This instance ignores keys that do not exist.
--- |
--- | If a key does not exist in the given `Option _`, it is not added to the `Foreign`.
--- |
--- | If a key does exists in the given `Option _`, it writes it like normal and adds it to the `Foreign`.
-instance writeForeignOptionOption ::
-  ( Prim.RowList.RowToList option list
-  , WriteForeignOption list option
-  ) =>
-  Simple.JSON.WriteForeign (Option option) where
-  writeImpl ::
-    Option option ->
-    Foreign.Foreign
-  writeImpl = writeForeignOption (Proxy :: Proxy list)
 
--- | A typeclass that iterates a `RowList` decoding an `Object Json` to an `Option _`.
-class DecodeJsonOption (list :: Prim.RowList.RowList) (option :: #Type) | list -> option where
-  -- | The `proxy` can be anything so long as its type variable has kind `Prim.RowList.RowList`.
-  -- |
-  -- | It will commonly be `Type.Data.RowList.RLProxy`, but doesn't have to be.
-  decodeJsonOption ::
-    forall proxy.
-    proxy list ->
-    Foreign.Object.Object Data.Argonaut.Core.Json ->
-    Data.Either.Either String (Option option)
 
-instance decodeJsonOptionNil :: DecodeJsonOption Prim.RowList.Nil () where
-  decodeJsonOption ::
-    forall proxy.
-    proxy Prim.RowList.Nil ->
-    Foreign.Object.Object Data.Argonaut.Core.Json ->
-    Data.Either.Either String (Option ())
-  decodeJsonOption _ _ = Data.Either.Right empty
-else instance decodeJsonOptionCons ::
-  ( Data.Argonaut.Decode.Class.DecodeJson value
-  , Data.Symbol.IsSymbol label
-  , DecodeJsonOption list option'
-  , Prim.Row.Cons label value option' option
-  , Prim.Row.Lacks label option'
-  ) =>
-  DecodeJsonOption (Prim.RowList.Cons label value list) option where
-  decodeJsonOption ::
-    forall proxy.
-    proxy (Prim.RowList.Cons label value list) ->
-    Foreign.Object.Object Data.Argonaut.Core.Json ->
-    Data.Either.Either String (Option option)
-  decodeJsonOption _ object' = case Foreign.Object.lookup key object' of
-    Data.Maybe.Just json -> do
-      value <- Data.Argonaut.Decode.Class.decodeJson json
-      option <- option'
-      Data.Either.Right (insert label value option)
-    Data.Maybe.Nothing -> do
-      Option object <- option'
-      Data.Either.Right (Option object)
-    where
-    label :: Data.Symbol.SProxy label
-    label = Data.Symbol.SProxy
 
-    key :: String
-    key = Data.Symbol.reflectSymbol label
 
-    option' :: Data.Either.Either String (Option option')
-    option' = decodeJsonOption proxy object'
 
-    proxy :: Proxy list
-    proxy = Proxy
 
--- | A typeclass that iterates a `RowList` encoding an `Option _` as `Json`.
-class EncodeJsonOption (list :: Prim.RowList.RowList) (option :: #Type) | list -> option where
-  -- | The `proxy` can be anything so long as its type variable has kind `Prim.RowList.RowList`.
-  -- |
-  -- | It will commonly be `Type.Data.RowList.RLProxy`, but doesn't have to be.
-  encodeJsonOption ::
-    forall proxy.
-    proxy list ->
-    Option option ->
-    Data.Argonaut.Core.Json
 
-instance encodeJsonOptionNil ::
-  EncodeJsonOption Prim.RowList.Nil () where
-  encodeJsonOption ::
-    forall proxy.
-    proxy Prim.RowList.Nil ->
-    Option () ->
-    Data.Argonaut.Core.Json
-  encodeJsonOption _ _ = Data.Argonaut.Core.jsonEmptyObject
-else instance encodeJsonOptionCons ::
-  ( Data.Argonaut.Encode.Class.EncodeJson value
-  , Data.Symbol.IsSymbol label
-  , EncodeJsonOption list option'
-  , Prim.Row.Cons label value option' option
-  , Prim.Row.Lacks label option'
-  ) =>
-  EncodeJsonOption (Prim.RowList.Cons label value list) option where
-  encodeJsonOption ::
-    forall proxy.
-    proxy (Prim.RowList.Cons label value list) ->
-    Option option ->
-    Data.Argonaut.Core.Json
-  encodeJsonOption _ option = case value' of
-    Data.Maybe.Just value ->
-      Data.Argonaut.Encode.Combinators.extend
-        ( Data.Argonaut.Encode.Combinators.assoc
-            key
-            (Data.Argonaut.Encode.Class.encodeJson value)
-        )
-        json
-    Data.Maybe.Nothing -> json
-    where
-    json :: Data.Argonaut.Core.Json
-    json = encodeJsonOption proxy option'
 
-    key :: String
-    key = Data.Symbol.reflectSymbol label
 
-    label :: Data.Symbol.SProxy label
-    label = Data.Symbol.SProxy
 
-    option' :: Option option'
-    option' = delete label option
 
-    proxy :: Proxy list
-    proxy = Proxy
 
-    value' :: Data.Maybe.Maybe value
-    value' = get label option
 
 -- | A typeclass that iterates a `RowList` converting an `Option _` to a `Boolean`.
 class EqOption (list :: Prim.RowList.RowList) (option :: #Type) | list -> option where
@@ -479,146 +283,16 @@ else instance fromRecordOptionCons ::
     value :: value
     value = Record.get label record
 
--- | A typeclass that converts a record of `JsonCodec`s into a `JsonCodec` for an option.
--- |
--- | This is useful to provide a straight-forward `JsonCodec` for an `Option _`.
-class JsonCodec (record :: #Type) (option :: #Type) where
-  -- | Creates a `JsonCodec` for an `Option _` given a `Record _` of `JsonCodec`s.
-  -- |
-  -- | E.g.
-  -- | The `String` is used in errors when decoding fails.
-  -- |
-  -- | ```PureScript
-  -- | type Example
-  -- |   = Option.Option
-  -- |       ( foo :: Boolean
-  -- |       , bar :: Int
-  -- |       )
-  -- |
-  -- | jsonCodec :: Data.Codec.Argonaut.JsonCodec Example
-  -- | jsonCodec =
-  -- |   Option.jsonCodec
-  -- |     "Example"
-  -- |     { foo: Data.Codec.Argonaut.boolean
-  -- |     , bar: Data.Codec.Argonaut.int
-  -- |     }
-  -- | ```
-  jsonCodec' ::
-    String ->
-    Record record ->
-    Data.Codec.Argonaut.JsonCodec (Option option)
 
--- | This instance ignores keys that do not exist in the given JSON object and does not insert keys that do not exist in the given `Option _`.
--- |
--- | If a key does not exist in the JSON object, it will not be added to the `Option _`.
--- |
--- | If a key does exists in the JSON object but the value cannot be successfully decoded, it will fail with an error.
--- |
--- | If a key does exists in the JSON object and the value can be successfully decoded, it will be added to the `Option _`.
--- |
--- | If a key does not exist in the given `Option _`, it is not added to the JSON object.
--- |
--- | If a key does exists in the given `Option _`, it encodes it like normal and adds it to the JSON object.
-instance jsonCodecOptionAny ::
-  ( JsonCodecOption list record option
-  , Prim.RowList.RowToList record list
-  ) =>
-  JsonCodec record option where
-  jsonCodec' ::
-    String ->
-    Record record ->
-    Data.Codec.Argonaut.JsonCodec (Option option)
-  jsonCodec' name record =
-    Data.Codec.Argonaut.object
-      name
-      (jsonCodecOption (Proxy :: Proxy list) record)
 
--- | A typeclass that iterates a `RowList` converting a record of `JsonCodec`s into a `JsonCodec` for an option.
-class JsonCodecOption (list :: Prim.RowList.RowList) (record :: #Type) (option :: #Type) | list -> option record where
-  -- | The `proxy` can be anything so long as its type variable has kind `Prim.RowList.RowList`.
-  -- |
-  -- | It will commonly be `Type.Data.RowList.RLProxy`, but doesn't have to be.
-  jsonCodecOption ::
-    forall proxy.
-    proxy list ->
-    Record record ->
-    Data.Codec.Argonaut.JPropCodec (Option option)
 
-instance jsonCodecOptionNil :: JsonCodecOption Prim.RowList.Nil () () where
-  jsonCodecOption ::
-    forall proxy.
-    proxy Prim.RowList.Nil ->
-    Record () ->
-    Data.Codec.Argonaut.JPropCodec (Option ())
-  jsonCodecOption _ _ =
-    Data.Codec.mapCodec
-      (\_ -> Data.Either.Right empty)
-      (\_ -> {})
-      Data.Codec.Argonaut.record
-else instance jsonCodecOptionCons ::
-  ( Data.Symbol.IsSymbol label
-  , JsonCodecOption list record' option'
-  , Prim.Row.Cons label value' option' option
-  , Prim.Row.Cons label (Data.Codec.Argonaut.JsonCodec value') record' record
-  , Prim.Row.Lacks label option'
-  , Prim.Row.Lacks label record'
-  , Type.Equality.TypeEquals value (Data.Codec.Argonaut.JsonCodec value')
-  ) =>
-  JsonCodecOption (Prim.RowList.Cons label value list) record option where
-  jsonCodecOption ::
-    forall proxy.
-    proxy (Prim.RowList.Cons label value list) ->
-    Record record ->
-    Data.Codec.Argonaut.JPropCodec (Option option)
-  jsonCodecOption _ record' =
-    Data.Codec.GCodec
-      (Control.Monad.Reader.Trans.ReaderT decode)
-      (Data.Profunctor.Star.Star encode)
-    where
-    codec :: Data.Codec.Argonaut.JsonCodec value'
-    codec = Record.get label record'
 
-    decode ::
-      Foreign.Object.Object Data.Argonaut.Core.Json ->
-      Data.Either.Either Data.Codec.Argonaut.JsonDecodeError (Option option)
-    decode object' = do
-      option@(Option object) <- Data.Codec.Argonaut.decode option' object'
-      case Foreign.Object.lookup key object' of
-        Data.Maybe.Just json -> case Data.Codec.Argonaut.decode codec json of
-          Data.Either.Left error -> Data.Either.Left (Data.Codec.Argonaut.AtKey key error)
-          Data.Either.Right value -> Data.Either.Right (insert label value option)
-        Data.Maybe.Nothing -> Data.Either.Right (Option object)
 
-    encode ::
-      Option option ->
-      Control.Monad.Writer.Writer (Data.List.List (Data.Tuple.Tuple String Data.Argonaut.Core.Json)) (Option option)
-    encode option = do
-      case get label option of
-        Data.Maybe.Just value ->
-          Control.Monad.Writer.Class.tell
-            ( Data.List.Cons
-                (Data.Tuple.Tuple key (Data.Codec.Argonaut.encode codec value))
-                Data.List.Nil
-            )
-        Data.Maybe.Nothing -> pure unit
-      Control.Monad.Writer.Class.tell
-        (Data.Codec.Argonaut.encode option' (delete label option))
-      pure option
 
-    key :: String
-    key = Data.Symbol.reflectSymbol label
 
-    label :: Data.Symbol.SProxy label
-    label = Data.Symbol.SProxy
 
-    option' :: Data.Codec.Argonaut.JPropCodec (Option option')
-    option' = jsonCodecOption proxy record
 
-    proxy :: Proxy list
-    proxy = Proxy
 
-    record :: Record record'
-    record = Record.delete label record'
 
 -- | A typeclass that iterates a `RowList` converting an `Option _` to a `Boolean`.
 class
@@ -684,59 +358,10 @@ else instance ordOptionCons ::
     rightValue :: Data.Maybe.Maybe value
     rightValue = get label right'
 
--- | A typeclass that iterates a `RowList` attempting to read a `Foreign` to an `Option _`.
-class ReadForeignOption (list :: Prim.RowList.RowList) (option :: #Type) | list -> option where
-  -- | The `proxy` can be anything so long as its type variable has kind `Prim.RowList.RowList`.
-  -- |
-  -- | It will commonly be `Type.Data.RowList.RLProxy`, but doesn't have to be.
-  readImplOption ::
-    forall proxy.
-    proxy list ->
-    Foreign.Foreign ->
-    Foreign.F (Option option)
 
-instance readForeignOptionNil :: ReadForeignOption Prim.RowList.Nil () where
-  readImplOption ::
-    forall proxy.
-    proxy Prim.RowList.Nil ->
-    Foreign.Foreign ->
-    Foreign.F (Option ())
-  readImplOption _ _ = pure empty
-else instance readForeignOptionCons ::
-  ( Data.Symbol.IsSymbol label
-  , Prim.Row.Cons label value option' option
-  , Prim.Row.Lacks label option'
-  , ReadForeignOption list option'
-  , Simple.JSON.ReadForeign value
-  ) =>
-  ReadForeignOption (Prim.RowList.Cons label value list) option where
-  readImplOption ::
-    forall proxy.
-    proxy (Prim.RowList.Cons label value list) ->
-    Foreign.Foreign ->
-    Foreign.F (Option option)
-  readImplOption _ foreign' = do
-    option@(Option object) <- option'
-    case Foreign.Index.hasProperty key foreign' of
-      true ->
-        Control.Monad.Except.except case Control.Monad.Except.runExcept (Foreign.Index.readProp key foreign') of
-          Data.Either.Left errors -> Data.Either.Left (map (Foreign.Index.errorAt key) errors)
-          Data.Either.Right value' -> case Control.Monad.Except.runExcept (Simple.JSON.readImpl value') of
-            Data.Either.Left errors -> Data.Either.Left (map (Foreign.Index.errorAt key) errors)
-            Data.Either.Right value -> Data.Either.Right (insert label value option)
-      false -> pure (Option object)
-    where
-    key :: String
-    key = Data.Symbol.reflectSymbol label
 
-    label :: Data.Symbol.SProxy label
-    label = Data.Symbol.SProxy
 
-    option' :: Foreign.F (Option option')
-    option' = readImplOption proxy foreign'
 
-    proxy :: Proxy list
-    proxy = Proxy
 
 -- | A typeclass that iterates a `RowList` converting an `Option _` to a `List String`.
 -- | The `List String` should be processed into a single `String`.
@@ -887,65 +512,6 @@ else instance toRecordOptionCons ::
     value :: Data.Maybe.Maybe value
     value = get label option
 
--- | A typeclass that iterates a `RowList` writing an `Option _` to a `Foreign`.
-class WriteForeignOption (list :: Prim.RowList.RowList) (option :: #Type) | list -> option where
-  -- | The `proxy` can be anything so long as its type variable has kind `Prim.RowList.RowList`.
-  -- |
-  -- | It will commonly be `Type.Data.RowList.RLProxy`, but doesn't have to be.
-  writeForeignOption ::
-    forall proxy.
-    proxy list ->
-    Option option ->
-    Foreign.Foreign
-
-instance writeForeignOptionNil ::
-  WriteForeignOption Prim.RowList.Nil () where
-  writeForeignOption ::
-    forall proxy.
-    proxy Prim.RowList.Nil ->
-    Option () ->
-    Foreign.Foreign
-  writeForeignOption _ _ = Foreign.unsafeToForeign {}
-else instance writeForeignOptionCons ::
-  ( Data.Symbol.IsSymbol label
-  , Prim.Row.Cons label value option' option
-  , Prim.Row.Lacks label option'
-  , Simple.JSON.WriteForeign value
-  , WriteForeignOption list option'
-  ) =>
-  WriteForeignOption (Prim.RowList.Cons label value list) option where
-  writeForeignOption ::
-    forall proxy.
-    proxy (Prim.RowList.Cons label value list) ->
-    Option option ->
-    Foreign.Foreign
-  writeForeignOption _ option' = case value' of
-    Data.Maybe.Just value ->
-      Foreign.unsafeToForeign
-        (Foreign.Object.insert key (Simple.JSON.writeImpl value) object)
-    Data.Maybe.Nothing -> foreign'
-    where
-    foreign' :: Foreign.Foreign
-    foreign' = writeForeignOption proxy option
-
-    key :: String
-    key = Data.Symbol.reflectSymbol label
-
-    label :: Data.Symbol.SProxy label
-    label = Data.Symbol.SProxy
-
-    object :: Foreign.Object.Object Foreign.Foreign
-    object = Foreign.unsafeFromForeign foreign'
-
-    option :: Option option'
-    option = delete label option'
-
-    proxy :: Proxy list
-    proxy = Proxy
-
-    value' :: Data.Maybe.Maybe value
-    value' = get label option'
-
 -- Do not export this value. It can be abused to invalidate invariants.
 alter ::
   forall label option option' proxy value value'.
@@ -1075,36 +641,6 @@ get proxy option = (alter go proxy option).value
   go :: Data.Maybe.Maybe value -> Data.Maybe.Maybe value
   go value = value
 
--- | Attempts to fetch the value at the given key from an option falling back to the default.
--- |
--- | If the key exists in the option, `Just _` is returned.
--- |
--- | If the key does not exist in the option, `Nothing` is returned.
--- |
--- | E.g.
--- | ```PureScript
--- | someOption :: Option.Option ( foo :: Boolean, bar :: Int )
--- | someOption = Option.insert (Data.Symbol.SProxy :: _ "bar") 31 Option.empty
--- |
--- | bar :: Int
--- | bar = Option.getWithDefault 13 (Data.Symbol.SProxy :: _ "bar") someOption
--- | ```
--- |
--- | The `proxy` can be anything so long as its type variable has kind `Symbol`.
--- |
--- | It will commonly be `Data.Symbol.SProxy`, but doesn't have to be.
-getWithDefault ::
-  forall label option option' proxy value.
-  Data.Symbol.IsSymbol label =>
-  Prim.Row.Cons label value option' option =>
-  value ->
-  proxy label ->
-  Option option ->
-  value
-getWithDefault default proxy option = case get proxy option of
-  Data.Maybe.Just value -> value
-  Data.Maybe.Nothing -> default
-
 -- | Adds a new key with the given value to an option.
 -- | The key must not already exist in the option.
 -- | If the key might already exist in the option, `set` should be used instead.
@@ -1135,35 +671,6 @@ insert proxy value option = (alter go proxy option).option
   go :: forall a. a -> Data.Maybe.Maybe value
   go _ = Data.Maybe.Just value
 
--- | Creates a `JsonCodec` for an `Option _` given a `Record _` of `JsonCodec`s.
--- |
--- | The `String` is used in errors when decoding fails.
--- |
--- | E.g.
--- | ```PureScript
--- | type Example
--- |   = Option.Option
--- |       ( foo :: Boolean
--- |       , bar :: Int
--- |       )
--- |
--- | jsonCodec :: Data.Codec.Argonaut.JsonCodec Example
--- | jsonCodec =
--- |   Option.jsonCodec
--- |     "Example"
--- |     { foo: Data.Codec.Argonaut.boolean
--- |     , bar: Data.Codec.Argonaut.int
--- |     }
--- | ```
--- |
--- | This is an alias for `jsonCodec'` so the documentation is a bit clearer.
-jsonCodec ::
-  forall option record.
-  JsonCodec record option =>
-  String ->
-  Record record ->
-  Data.Codec.Argonaut.JsonCodec (Option option)
-jsonCodec = jsonCodec'
 
 -- | Manipulates the value of a key in an option.
 -- |

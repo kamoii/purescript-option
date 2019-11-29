@@ -278,3 +278,6 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.gitignore.io/api/vim,node,macos,bower,linux,emacs,windows,purescript,sublimetext,visualstudiocode
+
+# Spago
+/.spago/
